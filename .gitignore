@@ -190,7 +190,7 @@ spark-events/
 
 # DEB Workshop
 de-lifecycle
-data/
+# data/
 
 # DEB dataengineercafe keyfiles
 dataengineercafe-*.json
