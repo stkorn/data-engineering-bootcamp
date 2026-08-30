@@ -8,7 +8,7 @@ BUSINESS_DOMAIN = "greenery"
 project_id = "gen-lang-client-0322103833"
 location = "asia-southeast1"
 bucket_name = "deb6-bootcamp-17"
-data = "products"
+data = "users"
 
 # Prepare and Load Credentials to Connect to GCP Services
 keyfile_gcs = "uploading-file-gcs-buckets.json"
