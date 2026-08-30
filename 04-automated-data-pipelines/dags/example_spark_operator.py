@@ -31,10 +31,10 @@ with DAG(
         conn_id="my_spark",
     )
 
-    submit_demo_gcs_app = SparkSubmitOperator(
-        task_id="submit_demo_gcs_app",
-        application="/opt/airflow/dags/demo_gcs.py",
-        conn_id="my_spark",
-    )
+    # submit_demo_gcs_app = SparkSubmitOperator(
+    #     task_id="submit_demo_gcs_app",
+    #     application="/opt/airflow/dags/demo_gcs.py",
+    #     conn_id="my_spark",
+    # )
 
-    submit_demo_app >> submit_demo_gcs_app
+    # submit_demo_app >> submit_demo_gcs_app
