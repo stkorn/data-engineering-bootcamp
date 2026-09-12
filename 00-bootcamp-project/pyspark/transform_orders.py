@@ -1,8 +1,12 @@
+import os
+
 from pyspark.sql import SparkSession
-from pyspark.sql.types import StructField, StructType, StringType, TimestampType
+from pyspark.sql.types import StructField, StructType, StringType, TimestampType, DoubleType
 
-
-KEYFILE_PATH = "/opt/spark/pyspark/uploading-file-gcs-buckets.json"
+BUSINESS_DOMAIN = "greenery"
+BUCKET_NAME = "deb6-bootcamp-17"
+DATA = "orders"
+KEYFILE_PATH = "/opt/spark/config/deb-upload-to-gcs.json"
 
 # GCS Connector Path (on Spark): /opt/spark/jars/gcs-connector-hadoop3-latest.jar
 # GCS Connector Path (on Airflow): /home/airflow/.local/lib/python3.9/site-packages/pyspark/jars/gcs-connector-hadoop3-latest.jar
@@ -23,29 +27,50 @@ spark = SparkSession.builder.appName("transform_orders") \
     .config("google.cloud.auth.service.account.json.keyfile", KEYFILE_PATH) \
     .getOrCreate()
 
+# SCHEMA = [
+#     bigquery.SchemaField("order_id", bigquery.SqlTypeNames.STRING),
+#     bigquery.SchemaField("created_at", bigquery.SqlTypeNames.TIMESTAMP),
+#     bigquery.SchemaField("order_cost", bigquery.SqlTypeNames.FLOAT),
+#     bigquery.SchemaField("shipping_cost", bigquery.SqlTypeNames.FLOAT),
+#     bigquery.SchemaField("order_total", bigquery.SqlTypeNames.FLOAT),
+#     bigquery.SchemaField("tracking_id", bigquery.SqlTypeNames.STRING),
+#     bigquery.SchemaField("shipping_service", bigquery.SqlTypeNames.STRING),
+#     bigquery.SchemaField("estimated_delivery_at", bigquery.SqlTypeNames.TIMESTAMP),
+#     bigquery.SchemaField("delivered_at", bigquery.SqlTypeNames.TIMESTAMP),
+#     bigquery.SchemaField("status", bigquery.SqlTypeNames.STRING),
+#     bigquery.SchemaField("user_id", bigquery.SqlTypeNames.STRING),
+#     bigquery.SchemaField("promo_id", bigquery.SqlTypeNames.STRING),
+#     bigquery.SchemaField("address_id", bigquery.SqlTypeNames.STRING),
+# ]
 # Example schema for Greenery users data
-# struct_schema = StructType([
-#     StructField("user_id", StringType()),
-#     StructField("first_name", StringType()),
-#     StructField("last_name", StringType()),
-#     StructField("email", StringType()),
-#     StructField("phone_number", StringType()),
-#     StructField("created_at", TimestampType()),
-#     StructField("updated_at", TimestampType()),
-#     StructField("address_id", StringType()),
-# ])
+struct_schema = StructType([
+    StructField("order_id", StringType()),
+    StructField("created_at", TimestampType()),
+    StructField("order_cost", DoubleType()),
+    StructField("shipping_cost", DoubleType()),
+    StructField("order_total", DoubleType()),
+    StructField("tracking_id", StringType()),
+    StructField("shipping_service", StringType()),
+    StructField("estimated_delivery_at", TimestampType()),
+    StructField("delivered_at", TimestampType()),
+    StructField("status", StringType()),
+    StructField("user_id", StringType()),
+    StructField("promo_id", StringType()),
+    StructField("address_id", StringType()),
+])
 
-GCS_FILE_PATH = "gs://deb6-bootcamp-17/raw/greenery/orders/orders.csv"
-
-df = spark.read \
-    .option("header", True) \
-    .option("inferSchema", True) \
-    .csv(GCS_FILE_PATH)
+execution_date = os.getenv("EXECUTION_DATE")
+GCS_FILE_PATH = f"gs://{BUCKET_NAME}/raw/{BUSINESS_DOMAIN}/{DATA}/{execution_date}/{DATA}.csv"
 
 # df = spark.read \
 #     .option("header", True) \
-#     .schema(struct_schema) \
+#     .option("inferSchema", True) \
 #     .csv(GCS_FILE_PATH)
+
+df = spark.read \
+    .option("header", True) \
+    .schema(struct_schema) \
+    .csv(GCS_FILE_PATH)
 
 df.show()
 
@@ -57,5 +82,5 @@ result = spark.sql("""
     from items
 """)
 
-OUTPUT_PATH = "gs://deb6-bootcamp-17/cleaned/greenery/orders/"
+OUTPUT_PATH = f"gs://{BUCKET_NAME}/cleaned/{BUSINESS_DOMAIN}/{DATA}/{execution_date}"
 result.write.mode("overwrite").parquet(OUTPUT_PATH)

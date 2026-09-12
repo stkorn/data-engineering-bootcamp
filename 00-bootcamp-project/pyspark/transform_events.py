@@ -1,8 +1,12 @@
+import os
+
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructField, StructType, StringType, TimestampType
 
-
-KEYFILE_PATH = "/opt/spark/pyspark/uploading-file-gcs-buckets.json"
+BUSINESS_DOMAIN = "greenery"
+BUCKET_NAME = "deb6-bootcamp-17"
+DATA = "events"
+KEYFILE_PATH = "/opt/spark/config/deb-upload-to-gcs.json"
 
 # GCS Connector Path (on Spark): /opt/spark/jars/gcs-connector-hadoop3-latest.jar
 # GCS Connector Path (on Airflow): /home/airflow/.local/lib/python3.9/site-packages/pyspark/jars/gcs-connector-hadoop3-latest.jar
@@ -15,6 +19,8 @@ KEYFILE_PATH = "/opt/spark/pyspark/uploading-file-gcs-buckets.json"
 #     .config("google.cloud.auth.service.account.json.keyfile", KEYFILE_PATH) \
 #     .getOrCreate()
 
+execution_date = os.getenv("EXECUTION_DATE")
+
 spark = SparkSession.builder.appName("transform_events") \
     .config("spark.memory.offHeap.enabled", "true") \
     .config("spark.memory.offHeap.size", "5g") \
@@ -24,29 +30,28 @@ spark = SparkSession.builder.appName("transform_events") \
     .getOrCreate()
 
 # Example schema for Greenery users data
-# struct_schema = StructType([
-#     StructField("user_id", StringType()),
-#     StructField("first_name", StringType()),
-#     StructField("last_name", StringType()),
-#     StructField("email", StringType()),
-#     StructField("phone_number", StringType()),
-#     StructField("created_at", TimestampType()),
-#     StructField("updated_at", TimestampType()),
-#     StructField("address_id", StringType()),
-# ])
+struct_schema = StructType([
+    StructField("event_id", StringType()),
+    StructField("session_id", StringType()),
+    StructField("page_url", StringType()),
+    StructField("created_at", TimestampType()),
+    StructField("event_type", StringType()),
+    StructField("user_id", StringType()),
+    StructField("order_id", StringType()),
+    StructField("product_id", StringType()),
+])
 
-dt = "2021-02-10"
-GCS_FILE_PATH = f"gs://deb6-bootcamp-17/raw/greenery/events/{dt}/events.csv"
-
-df = spark.read \
-    .option("header", True) \
-    .option("inferSchema", True) \
-    .csv(GCS_FILE_PATH)
+GCS_FILE_PATH = f"gs://{BUCKET_NAME}/raw/{BUSINESS_DOMAIN}/{DATA}/{execution_date}/{DATA}.csv"
 
 # df = spark.read \
 #     .option("header", True) \
-#     .schema(struct_schema) \
+#     .option("inferSchema", True) \
 #     .csv(GCS_FILE_PATH)
+
+df = spark.read \
+    .option("header", True) \
+    .schema(struct_schema) \
+    .csv(GCS_FILE_PATH)
 
 df.show()
 
@@ -58,5 +63,5 @@ result = spark.sql("""
     from events
 """)
 
-OUTPUT_PATH = f"gs://deb6-bootcamp-17/cleaned/greenery/events/{dt}"
+OUTPUT_PATH = f"gs://{BUCKET_NAME}/cleaned/{BUSINESS_DOMAIN}/{DATA}/{execution_date}"
 result.write.mode("overwrite").parquet(OUTPUT_PATH)

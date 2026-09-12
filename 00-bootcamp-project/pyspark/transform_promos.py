@@ -2,7 +2,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.types import StructField, StructType, StringType, TimestampType
 
 
-KEYFILE_PATH = "/opt/spark/pyspark/uploading-file-gcs-buckets.json"
+KEYFILE_PATH = "/opt/spark/config/deb-upload-to-gcs.json"
 
 # GCS Connector Path (on Spark): /opt/spark/jars/gcs-connector-hadoop3-latest.jar
 # GCS Connector Path (on Airflow): /home/airflow/.local/lib/python3.9/site-packages/pyspark/jars/gcs-connector-hadoop3-latest.jar

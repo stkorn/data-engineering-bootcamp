@@ -1,4 +1,5 @@
 from airflow import DAG  # noqa: F401 - keeps Airflow's DAG-file safe-mode scanner from skipping this file
+from google.cloud import bigquery
 from greenery_pipeline_factory import create_greenery_pipeline
 
 
@@ -20,9 +21,18 @@ def _map_address_row(record: dict) -> list:
         record["country"],
     ]
 
+SCHEMA = [
+    bigquery.SchemaField("address_id", bigquery.SqlTypeNames.STRING),
+    bigquery.SchemaField("address", bigquery.SqlTypeNames.STRING),
+    bigquery.SchemaField("zipcode", bigquery.SqlTypeNames.STRING),
+    bigquery.SchemaField("state", bigquery.SqlTypeNames.STRING),
+    bigquery.SchemaField("country", bigquery.SqlTypeNames.STRING),
+]
+
 
 dag = create_greenery_pipeline(
     data="addresses",
     header=HEADER,
-    row_mapper=_map_address_row,
+    schema=SCHEMA,
+    row_mapper=_map_address_row
 )

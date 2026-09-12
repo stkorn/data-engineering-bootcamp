@@ -3,7 +3,8 @@ import json
 from typing import Callable
 
 from airflow import DAG
-from airflow.operators.python import PythonOperator
+from airflow.operators.empty import EmptyOperator
+from airflow.operators.python import BranchPythonOperator, PythonOperator
 from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 from airflow.utils import timezone
 
@@ -24,38 +25,47 @@ def create_greenery_pipeline(
     data: str,
     header: list[str],
     row_mapper: Callable[[dict], list],
+    schema: list[bigquery.SchemaField] | None = None,
     schedule: str = "@daily",
     start_date=timezone.datetime(2026, 8, 29),
     is_partition: bool = False,
 ) -> DAG:
     """Build extract -> GCS -> Spark transform -> BigQuery DAG for one Greenery dataset."""
 
-    def _extract_data():
-        url = f"http://34.87.139.82:8000/{data}/"
+    def _extract_data(ds=None):
+        dataUrl = data.replace("_", "-")
+        url = f"http://34.87.139.82:8000/{dataUrl}/"
+        if is_partition:
+            url += f"?created_at={ds}"
         response = requests.get(url)
         records = response.json()
 
         if records:
 
-        with open(f"{DAGS_FOLDER}/raw/{data}.csv", "w") as f:
-            writer = csv.writer(f)
-            writer.writerow(header)
-            for record in records:
-                writer.writerow(row_mapper(record))
+            raw_file_name = f"{data}-{ds}" if is_partition else data
+            with open(f"{DAGS_FOLDER}/raw/{raw_file_name}.csv", "w") as f:
+                writer = csv.writer(f)
+                writer.writerow(header)
+                for record in records:
+                    writer.writerow(row_mapper(record))
 
-            # From this
+                # From this
 
-            # for each in data:
-            # data = [
-            #     each["address_id"],
-            #     each["address"],
-            #     each["zipcode"],
-            #     each["state"],
-            #     each["country"],
-            # ]
-            # writer.writerow(data)
+                # for each in data:
+                # data = [
+                #     each["address_id"],
+                #     each["address"],
+                #     each["zipcode"],
+                #     each["state"],
+                #     each["country"],
+                # ]
+                # writer.writerow(data)
+            return "load_data_to_gcs"
 
-    def _load_data_to_gcs():
+        else:
+            return "do_nothing"
+
+    def _load_data_to_gcs(ds=None):
         keyfile_gcs = "/opt/airflow/config/deb-upload-to-gcs.json"
         service_account_info_gcs = json.load(open(keyfile_gcs))
         credentials_gcs = service_account.Credentials.from_service_account_info(
@@ -68,12 +78,16 @@ def create_greenery_pipeline(
         )
         bucket = storage_client.bucket(BUCKET_NAME)
 
-        file_path = f"{DAGS_FOLDER}/raw/{data}.csv"
-        destination_blob_name = f"raw/{BUSINESS_DOMAIN}/{data}/{data}.csv"
+        raw_file_name = f"{data}-{ds}" if is_partition else data
+        file_path = f"{DAGS_FOLDER}/raw/{raw_file_name}.csv"
+        destination_blob_name = f"raw/{BUSINESS_DOMAIN}/{data}/"
+        if is_partition:
+            destination_blob_name += f"{ds}/"
+        destination_blob_name += f"{data}.csv"
         blob = bucket.blob(destination_blob_name)
         blob.upload_from_filename(file_path)
 
-    def _load_data_from_gcs_to_bigquery():
+    def _load_data_from_gcs_to_bigquery(ds=None):
         keyfile_bigquery = "/opt/airflow/config/deb-load-data-to-bigquery.json"
         service_account_info_bigquery = json.load(open(keyfile_bigquery))
         credentials_bigquery = service_account.Credentials.from_service_account_info(
@@ -86,13 +100,22 @@ def create_greenery_pipeline(
             location=LOCATION,
         )
 
-        table_id = f"{GCP_PROJECT_ID}.{BQ_DATASET}.{data}"
+        partition = ds.replace("-", "")
+        table_id = f"{GCP_PROJECT_ID}.{BQ_DATASET}.{data}${partition}" if is_partition else f"{GCP_PROJECT_ID}.{BQ_DATASET}.{data}"
         job_config = bigquery.LoadJobConfig(
             write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
-            source_format=bigquery.SourceFormat.PARQUET
+            source_format=bigquery.SourceFormat.PARQUET,
+            schema=schema,
+            time_partitioning=bigquery.TimePartitioning(
+                type_=bigquery.TimePartitioningType.DAY,
+                field="created_at",
+            ) if is_partition else None,
         )
 
-        destination_blob_name = f"cleaned/{BUSINESS_DOMAIN}/{data}/*.parquet"
+        destination_blob_name = f"cleaned/{BUSINESS_DOMAIN}/{data}/"
+        if is_partition:
+            destination_blob_name += f"{ds}/"
+        destination_blob_name += "*.parquet"
         job = bigquery_client.load_table_from_uri(
             f"gs://{BUCKET_NAME}/{destination_blob_name}",
             table_id,
@@ -108,16 +131,16 @@ def create_greenery_pipeline(
         "owner": "airflow",
         "start_date": start_date,
     }
-    dag = DAG(
+    with DAG(
         dag_id=f"greenery_{data}_data_pipeline",
         default_args=default_args,
         schedule=schedule,
         catchup=False,
+        max_active_runs=1,
         tags=["DEB", "Skooldio", BUSINESS_DOMAIN],
-    )
+    ):
 
-    with dag:
-        extract_data = PythonOperator(
+        extract_data = BranchPythonOperator(
             task_id="extract_data",
             python_callable=_extract_data,
         )
@@ -139,6 +162,9 @@ def create_greenery_pipeline(
             python_callable=_load_data_from_gcs_to_bigquery,
         )
 
-        extract_data >> load_data_to_gcs >> transform_data >> load_data_from_gcs_to_bigquery
+        do_nothing = EmptyOperator(task_id="do_nothing")
 
-    return dag
+        end = EmptyOperator(task_id="end", trigger_rule="one_success")
+
+        extract_data >> load_data_to_gcs >> transform_data >> load_data_from_gcs_to_bigquery >> end
+        extract_data >> do_nothing >> end  # If no records, skip to end

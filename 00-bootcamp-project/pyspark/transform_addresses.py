@@ -2,6 +2,9 @@ from pyspark.sql import SparkSession
 from pyspark.sql.types import StructField, StructType, StringType, TimestampType
 
 
+BUSINESS_DOMAIN = "greenery"
+BUCKET_NAME = "deb6-bootcamp-17"
+DATA = "addresses"
 KEYFILE_PATH = "/opt/spark/config/deb-upload-to-gcs.json"
 
 # GCS Connector Path (on Spark): /opt/spark/jars/gcs-connector-hadoop3-latest.jar
@@ -24,28 +27,25 @@ spark = SparkSession.builder.appName("transform_addresses") \
     .getOrCreate()
 
 # Example schema for Greenery users data
-# struct_schema = StructType([
-#     StructField("user_id", StringType()),
-#     StructField("first_name", StringType()),
-#     StructField("last_name", StringType()),
-#     StructField("email", StringType()),
-#     StructField("phone_number", StringType()),
-#     StructField("created_at", TimestampType()),
-#     StructField("updated_at", TimestampType()),
-#     StructField("address_id", StringType()),
-# ])
+struct_schema = StructType([
+    StructField("address_id", StringType()),
+    StructField("address", StringType()),
+    StructField("zipcode", StringType()),
+    StructField("state", StringType()),
+    StructField("country", StringType()),
+])
 
 GCS_FILE_PATH = "gs://deb6-bootcamp-17/raw/greenery/addresses/addresses.csv"
 
-df = spark.read \
-    .option("header", True) \
-    .option("inferSchema", True) \
-    .csv(GCS_FILE_PATH)
-
 # df = spark.read \
 #     .option("header", True) \
-#     .schema(struct_schema) \
+#     .option("inferSchema", True) \
 #     .csv(GCS_FILE_PATH)
+
+df = spark.read \
+    .option("header", True) \
+    .schema(struct_schema) \
+    .csv(GCS_FILE_PATH)
 
 df.show()
 
