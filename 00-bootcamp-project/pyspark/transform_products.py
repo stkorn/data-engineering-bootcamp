@@ -1,7 +1,15 @@
-from pyspark.sql import SparkSession
-from pyspark.sql.types import StructField, StructType, StringType, TimestampType
+from pyspark.sql import SparkSession  # pyright: ignore[reportMissingImports]
+from pyspark.sql.types import (  # pyright: ignore[reportMissingImports]
+    StructField,
+    StructType,
+    StringType,
+    FloatType,
+    IntegerType,
+)
 
-
+BUSINESS_DOMAIN = "greenery"
+BUCKET_NAME = "deb6-bootcamp-17"
+DATA = "products"
 KEYFILE_PATH = "/opt/spark/config/deb-upload-to-gcs.json"
 
 # GCS Connector Path (on Spark): /opt/spark/jars/gcs-connector-hadoop3-latest.jar
@@ -23,29 +31,24 @@ spark = SparkSession.builder.appName("transform_product") \
     .config("google.cloud.auth.service.account.json.keyfile", KEYFILE_PATH) \
     .getOrCreate()
 
-# Example schema for Greenery users data
-# struct_schema = StructType([
-#     StructField("user_id", StringType()),
-#     StructField("first_name", StringType()),
-#     StructField("last_name", StringType()),
-#     StructField("email", StringType()),
-#     StructField("phone_number", StringType()),
-#     StructField("created_at", TimestampType()),
-#     StructField("updated_at", TimestampType()),
-#     StructField("address_id", StringType()),
-# ])
+struct_schema = StructType([
+    StructField("product_id", StringType()),
+    StructField("name", StringType()),
+    StructField("price", FloatType()),
+    StructField("inventory", IntegerType()),
+])
 
-GCS_FILE_PATH = "gs://deb6-bootcamp-17/raw/greenery/products/products.csv"
-
-df = spark.read \
-    .option("header", True) \
-    .option("inferSchema", True) \
-    .csv(GCS_FILE_PATH)
+GCS_FILE_PATH = f"gs://{BUCKET_NAME}/raw/{BUSINESS_DOMAIN}/{DATA}/{DATA}.csv"
 
 # df = spark.read \
 #     .option("header", True) \
-#     .schema(struct_schema) \
+#     .option("inferSchema", True) \
 #     .csv(GCS_FILE_PATH)
+
+df = spark.read \
+    .option("header", True) \
+    .schema(struct_schema) \
+    .csv(GCS_FILE_PATH)
 
 df.show()
 
@@ -57,5 +60,5 @@ result = spark.sql("""
     from products
 """)
 
-OUTPUT_PATH = "gs://deb6-bootcamp-17/cleaned/greenery/products/"
+OUTPUT_PATH = f"gs://{BUCKET_NAME}/cleaned/{BUSINESS_DOMAIN}/{DATA}/"
 result.write.mode("overwrite").parquet(OUTPUT_PATH)

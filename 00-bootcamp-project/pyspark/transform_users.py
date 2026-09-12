@@ -1,7 +1,12 @@
+import os
+
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructField, StructType, StringType, TimestampType
 
 
+BUSINESS_DOMAIN = "greenery"
+BUCKET_NAME = "deb6-bootcamp-17"
+DATA = "users"
 KEYFILE_PATH = "/opt/spark/config/deb-upload-to-gcs.json"
 
 # GCS Connector Path (on Spark): /opt/spark/jars/gcs-connector-hadoop3-latest.jar
@@ -24,28 +29,24 @@ spark = SparkSession.builder.appName("transform_users") \
     .getOrCreate()
 
 # Example schema for Greenery users data
-# struct_schema = StructType([
-#     StructField("user_id", StringType()),
-#     StructField("first_name", StringType()),
-#     StructField("last_name", StringType()),
-#     StructField("email", StringType()),
-#     StructField("phone_number", StringType()),
-#     StructField("created_at", TimestampType()),
-#     StructField("updated_at", TimestampType()),
-#     StructField("address_id", StringType()),
-# ])
+struct_schema = StructType([
+    StructField("user_id", StringType()),
+    StructField("first_name", StringType()),
+    StructField("last_name", StringType()),
+    StructField("email", StringType()),
+    StructField("phone_number", StringType()),
+    StructField("created_at", TimestampType()),
+    StructField("updated_at", TimestampType()),
+    StructField("address_id", StringType()),
+])
 
-GCS_FILE_PATH = "gs://deb6-bootcamp-17/raw/greenery/users/users.csv"
+execution_date = os.getenv("EXECUTION_DATE")
+GCS_FILE_PATH = f"gs://{BUCKET_NAME}/raw/{BUSINESS_DOMAIN}/{DATA}/{execution_date}/{DATA}.csv"
 
 df = spark.read \
     .option("header", True) \
-    .option("inferSchema", True) \
+    .schema(struct_schema) \
     .csv(GCS_FILE_PATH)
-
-# df = spark.read \
-#     .option("header", True) \
-#     .schema(struct_schema) \
-#     .csv(GCS_FILE_PATH)
 
 df.show()
 
@@ -57,5 +58,5 @@ result = spark.sql("""
     from items
 """)
 
-OUTPUT_PATH = "gs://deb6-bootcamp-17/cleaned/greenery/users/"
+OUTPUT_PATH = f"gs://{BUCKET_NAME}/cleaned/{BUSINESS_DOMAIN}/{DATA}/{execution_date}"
 result.write.mode("overwrite").parquet(OUTPUT_PATH)
